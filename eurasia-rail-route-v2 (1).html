@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Eurasia Rail Corridor — Guangzhou → Cologne (Western Corridor via Khorgos)</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#0c1116;
+    --panel:rgba(15,21,28,0.92);
+    --panel-solid:#0f151c;
+    --stroke:rgba(255,255,255,0.10);
+    --stroke-strong:rgba(255,255,255,0.18);
+    --ink:#e8edf2;
+    --ink-dim:#8a97a6;
+    --ink-faint:#5b6776;
+    --rail:#f5a623;        /* amber - rail */
+    --rail-glow:#ffce6b;
+    --truck:#ff7a45;       /* orange - truck */
+    --border:#ef4444;      /* red - border / gauge */
+    --start:#34d399;       /* green - origin */
+    --end:#22d3ee;         /* cyan - destination */
+    /* CO2 intensity palette */
+    --c-clean:#22c55e;     /* electrified rail - low */
+    --c-clean2:#4ade80;
+    --c-mix:#f59e0b;       /* eurasian mixed grid */
+    --c-dirty:#ef4444;     /* diesel truck */
+    --c-dirty2:#f87171;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
+    font-family:"JetBrains Mono",ui-monospace,monospace;color:var(--ink);}
+  #map{position:absolute;inset:0;background:#aadaff;z-index:1;}
+
+  .leaflet-container{background:#0c1116;font-family:"JetBrains Mono",monospace;}
+  .leaflet-control-attribution{background:rgba(12,17,22,0.7)!important;color:#6b7886!important;font-size:9px!important;}
+  .leaflet-control-attribution a{color:#8a97a6!important;}
+  .leaflet-bar a{background:#121922;color:#cfd8e2;border-color:#26313d;}
+  .leaflet-bar a:hover{background:#1a232e;}
+
+  /* TITLE */
+  .titlecard{position:absolute;top:14px;left:14px;z-index:1000;
+    background:var(--panel);backdrop-filter:blur(12px);
+    border:1px solid var(--stroke);border-radius:14px;padding:14px 16px 13px;max-width:340px;
+    box-shadow:0 18px 50px -18px rgba(0,0,0,.8);}
+  .titlecard .kick{font-size:9.5px;letter-spacing:.28em;color:var(--rail);text-transform:uppercase;font-weight:700;}
+  .titlecard h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;line-height:1.05;margin:7px 0 6px;letter-spacing:-0.01em;}
+  .titlecard h1 b{color:var(--start);} .titlecard h1 i{font-style:normal;color:var(--end);}
+  .titlecard .sub{font-size:10.5px;color:var(--ink-dim);line-height:1.5;}
+  .titlecard .chips{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .chip{font-size:9px;padding:3px 7px;border-radius:6px;border:1px solid var(--stroke-strong);color:var(--ink-dim);background:rgba(255,255,255,.03);letter-spacing:.04em;}
+  .chip b{color:var(--ink);font-weight:700;}
+
+  /* INFO PANEL */
+  .info{position:absolute;top:14px;right:14px;z-index:1000;width:300px;
+    background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--stroke);
+    border-radius:14px;overflow:hidden;box-shadow:0 18px 50px -18px rgba(0,0,0,.8);
+    max-height:calc(100vh - 28px);overflow-y:auto;}
+  .info .hd{padding:11px 14px;border-bottom:1px solid var(--stroke);display:flex;align-items:center;gap:8px;}
+  .pin{width:9px;height:9px;border-radius:50%;background:var(--rail);box-shadow:0 0 0 4px rgba(245,166,35,.18);flex:none;}
+  .info .hd .lbl{font-size:9px;letter-spacing:.22em;color:var(--ink-faint);text-transform:uppercase;}
+  .info .hd .seg{font-size:12px;font-weight:700;color:var(--ink);margin-top:1px;}
+  .leg-line{padding:12px 14px 4px;}
+  .leg-route{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:13.5px;line-height:1.25;}
+  .leg-route .arr{color:var(--rail);margin:0 5px;}
+  .mode-tag{display:inline-flex;align-items:center;gap:5px;margin-top:9px;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px;font-weight:700;}
+  .mode-rail{background:rgba(245,166,35,.14);color:var(--rail-glow);border:1px solid rgba(245,166,35,.3);}
+  .mode-truck{background:rgba(255,122,69,.14);color:#ffb094;border:1px solid rgba(255,122,69,.3);}
+  .mode-border{background:rgba(239,68,68,.16);color:#ff9b9b;border:1px solid rgba(239,68,68,.35);}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--stroke);margin:13px 0 0;border-top:1px solid var(--stroke);}
+  .metric{background:var(--panel-solid);padding:9px 14px;}
+  .metric .m-l{font-size:8.5px;letter-spacing:.13em;color:var(--ink-faint);text-transform:uppercase;}
+  .metric .m-v{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:16px;margin-top:3px;}
+  .metric .m-v small{font-size:10px;color:var(--ink-dim);font-weight:600;font-family:"JetBrains Mono",monospace;}
+  .event{padding:11px 14px;background:linear-gradient(180deg,rgba(239,68,68,.16),rgba(239,68,68,.06));border-top:1px solid rgba(239,68,68,.3);display:none;}
+  .event.show{display:block;animation:flash .5s ease;}
+  @keyframes flash{from{background:rgba(239,68,68,.4);}to{}}
+  .event .e-h{font-size:9px;letter-spacing:.2em;color:#ff9b9b;text-transform:uppercase;font-weight:700;display:flex;gap:6px;align-items:center;}
+  .event .e-h::before{content:"⚠";}
+  .event .e-b{font-size:10.5px;color:#ffd9d9;line-height:1.5;margin-top:5px;}
+  .totals{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--stroke);background:var(--stroke);gap:1px;}
+  .totals .metric .m-v{color:var(--end);}
+
+  /* CO2 SECTION */
+  .co2sec{padding:12px 14px 13px;border-top:1px solid var(--stroke);background:var(--panel-solid);}
+  .co2-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .co2-lbl{font-size:8.5px;letter-spacing:.16em;color:var(--ink-faint);text-transform:uppercase;}
+  .co2-val{font-size:11px;color:var(--ink-dim);}
+  .co2-val b{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:18px;color:var(--c-mix);}
+  .co2bar{position:relative;height:15px;border-radius:5px;overflow:hidden;margin:9px 0 9px;background:#0a0e12;display:flex;border:1px solid var(--stroke);}
+  .co2seg{height:100%;opacity:.32;transition:opacity .3s;}
+  .co2seg.done{opacity:1;} .co2seg.active{opacity:.85;}
+  .co2head{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 6px #fff;left:0;transition:left .1s linear;z-index:3;}
+  .co2legend{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;}
+  .co2row{display:flex;align-items:center;gap:6px;font-size:9px;color:var(--ink-faint);opacity:.5;transition:.3s;}
+  .co2row.done,.co2row.active{opacity:1;color:var(--ink-dim);}
+  .co2row .d{width:8px;height:8px;border-radius:2px;flex:none;}
+  .co2row .kg{margin-left:auto;color:var(--ink);font-weight:700;}
+  .co2foot{font-size:8.5px;color:var(--ink-faint);margin-top:10px;line-height:1.5;border-top:1px dashed var(--stroke);padding-top:8px;}
+
+  /* LEGEND (bottom-left) */
+  .legend{position:absolute;left:14px;bottom:16px;z-index:1000;background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--stroke);border-radius:12px;padding:11px 13px;box-shadow:0 18px 50px -18px rgba(0,0,0,.8);}
+  .legend .l-h{font-size:8.5px;letter-spacing:.2em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;}
+  .legend .row{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--ink-dim);margin:5px 0;}
+  .legend .sw{width:18px;height:0;border-top-width:3px;border-top-style:solid;flex:none;}
+  .legend .dot{width:11px;height:11px;border-radius:50%;flex:none;border:2px solid #0c1116;}
+
+  /* custom markers */
+  .wp{display:grid;place-items:center;}
+  .wp .ring{border-radius:50%;border:2.5px solid #0c1116;box-shadow:0 2px 6px rgba(0,0,0,.5);}
+  .wp .lab{position:absolute;white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:700;color:#0c1116;background:rgba(255,255,255,.93);padding:2px 6px;border-radius:5px;left:50%;transform:translateX(-50%);top:18px;box-shadow:0 2px 6px rgba(0,0,0,.3);letter-spacing:.02em;}
+  .wp .lab.big{font-size:11px;padding:3px 8px;}
+  .wp .lab .s{display:block;font-size:8px;font-weight:500;color:#566;margin-top:1px;}
+  .mover{width:34px;height:34px;position:relative;}
+  .mover .pulse{position:absolute;inset:0;border-radius:50%;background:rgba(245,166,35,.35);animation:pulse 1.6s ease-out infinite;}
+  @keyframes pulse{0%{transform:scale(.6);opacity:.9;}100%{transform:scale(2.3);opacity:0;}}
+  .mover .box{position:absolute;inset:7px;border-radius:7px;background:linear-gradient(160deg,#ffce6b,#f5a623);border:2px solid #1a1206;display:grid;place-items:center;font-size:13px;box-shadow:0 3px 10px rgba(0,0,0,.5);z-index:2;}
+  .mover.truckmode .box{background:linear-gradient(160deg,#ffb094,#ff7a45);}
+  .mover.bordermode .pulse{background:rgba(239,68,68,.4);}
+  .mover.bordermode .box{background:linear-gradient(160deg,#ff9b9b,#ef4444);}
+
+  /* CONTROLS */
+  .controls{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;z-index:1000;background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--stroke);border-radius:16px;padding:11px 16px;display:flex;align-items:center;gap:14px;min-width:560px;max-width:calc(100vw - 28px);box-shadow:0 18px 50px -18px rgba(0,0,0,.85);}
+  .btn{appearance:none;border:1px solid var(--stroke-strong);background:rgba(255,255,255,.04);color:var(--ink);width:40px;height:40px;border-radius:11px;cursor:pointer;font-size:15px;display:grid;place-items:center;transition:.16s;flex:none;}
+  .btn:hover{background:rgba(255,255,255,.1);border-color:var(--rail);color:var(--rail);}
+  .btn.primary{background:var(--rail);color:#1a1206;border-color:var(--rail);font-weight:700;}
+  .btn.primary:hover{background:var(--rail-glow);color:#1a1206;}
+  .scrub-wrap{flex:1;display:flex;flex-direction:column;gap:5px;min-width:140px;}
+  .scrub-meta{display:flex;justify-content:space-between;font-size:9px;color:var(--ink-faint);letter-spacing:.05em;}
+  .scrub-meta b{color:var(--ink-dim);font-weight:600;}
+  input[type=range]{appearance:none;width:100%;height:6px;border-radius:5px;cursor:pointer;background:linear-gradient(90deg,var(--rail) 0%,var(--rail) var(--p,0%),rgba(255,255,255,.12) var(--p,0%));}
+  input[type=range]::-webkit-slider-thumb{appearance:none;width:15px;height:15px;border-radius:50%;background:#fff;border:3px solid var(--rail);cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.5);}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:#fff;border:3px solid var(--rail);cursor:grab;}
+  .spd{display:flex;align-items:center;gap:7px;flex:none;}
+  .spd label{font-size:9px;color:var(--ink-faint);letter-spacing:.1em;}
+  .spd select{background:#121922;color:var(--ink);border:1px solid var(--stroke-strong);border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11px;cursor:pointer;}
+  .follow{display:flex;align-items:center;gap:6px;flex:none;cursor:pointer;user-select:none;font-size:9.5px;color:var(--ink-dim);letter-spacing:.06em;}
+  .follow input{accent-color:var(--rail);width:14px;height:14px;cursor:pointer;}
+
+  @media (max-width:820px){
+    .info{display:none;}
+    .titlecard{max-width:220px;padding:10px 12px;} .titlecard h1{font-size:16px;}
+    .controls{min-width:0;width:calc(100vw - 24px);gap:8px;padding:9px 11px;flex-wrap:wrap;}
+    .legend{display:none;} .spd label{display:none;}
+  }
+</style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="titlecard">
+    <div class="kick">Eurasia Rail · Western Corridor</div>
+    <h1><b>Guangzhou</b> → <i>Cologne</i></h1>
+    <div class="sub">1 × 40ft FCL · smartwatches. Exit China at <b style="color:#ff9b9b">Khorgos</b>, via Almaty · re-gauge at Brest.</div>
+    <div class="chips">
+      <span class="chip"><b>~12,540</b> km</span>
+      <span class="chip">Door-to-door <b>16–20 d</b></span>
+      <span class="chip"><b>≈4.3 t</b> CO₂e</span>
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="hd">
+      <div class="pin" id="pin"></div>
+      <div>
+        <div class="lbl">Current segment</div>
+        <div class="seg" id="segStatus">Ready to depart</div>
+      </div>
+    </div>
+    <div class="leg-line">
+      <div class="leg-route" id="legRoute">Guangzhou Baiyun Factory</div>
+      <span class="mode-tag mode-truck" id="modeTag">● Origin</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="m-l">Leg distance</div><div class="m-v" id="legKm">0 <small>km</small></div></div>
+      <div class="metric"><div class="m-l">Leg time</div><div class="m-v" id="legTime" style="font-size:13px">—</div></div>
+      <div class="metric"><div class="m-l">Leg CO₂e</div><div class="m-v" id="legCo2">0 <small>kg</small></div></div>
+      <div class="metric"><div class="m-l">Factor</div><div class="m-v" id="legFac" style="font-size:13px">—</div></div>
+    </div>
+    <div class="event" id="eventBox">
+      <div class="e-h" id="eventH">Border process</div>
+      <div class="e-b" id="eventB"></div>
+    </div>
+    <div class="totals">
+      <div class="metric"><div class="m-l">Distance covered</div><div class="m-v" id="cumKm">0 <small>km</small></div></div>
+      <div class="metric"><div class="m-l">Transit elapsed</div><div class="m-v" id="cumTime" style="font-size:13px">0 h</div></div>
+    </div>
+    <div class="co2sec">
+      <div class="co2-top">
+        <span class="co2-lbl">Cumulative CO₂e</span>
+        <span class="co2-val"><b id="co2Now">0</b> / 4,294 kg</span>
+      </div>
+      <div class="co2bar" id="co2bar"><div class="co2head" id="co2head"></div></div>
+      <div class="co2legend" id="co2legend"></div>
+      <div class="co2foot">CO₂e = distance × weight × emission factor · basis 16 t · diesel truck 80 g/t·km · electrified rail 18 · mixed-grid Eurasian rail 24.</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="l-h">Legend</div>
+    <div class="row"><span class="sw" style="border-top-color:var(--rail)"></span> Rail haul</div>
+    <div class="row"><span class="sw" style="border-top-color:var(--truck);border-top-style:dashed"></span> Truck drayage</div>
+    <div class="row"><span class="dot" style="background:var(--border)"></span> Border / gauge change</div>
+    <div class="row"><span class="dot" style="background:var(--start)"></span> Origin &nbsp;<span class="dot" style="background:var(--end)"></span> Destination</div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="playBtn" title="Play / Pause">▶</button>
+    <button class="btn" id="resetBtn" title="Reset">⟲</button>
+    <div class="scrub-wrap">
+      <input type="range" id="scrub" min="0" max="1000" value="0" step="1" />
+      <div class="scrub-meta"><b id="scrubFrom">Guangzhou</b><span id="scrubPct">0%</span><b id="scrubTo">Cologne</b></div>
+    </div>
+    <div class="spd">
+      <label>SPEED</label>
+      <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+    </div>
+    <label class="follow"><input type="checkbox" id="followChk"/> FOLLOW</label>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* =========================================================================
+   ROUTE DATA — Western Corridor, Guangzhou → Cologne, PDF-consistent
+   Exit China at KHORGOS → Altynkol → Almaty → Astana → ... → Brest re-gauge
+   cat (CO2 category): prehaul | china | eurasian | eu | posthaul | border
+   ========================================================================= */
+const legs = [
+ {from:"Guangzhou Baiyun Factory", to:"Dalang Rail Station", mode:"truck", cat:"prehaul",
+  km:25, time:"~40 min", hours:0.7, path:[[23.270,113.300],[23.210,113.190]]},
+
+ {from:"Dalang Station", to:"Xi'an Int'l Port", mode:"rail", cat:"china",
+  km:1650, time:"~16–18 h", hours:17,
+  path:[[23.210,113.190],[28.230,112.940],[32.900,112.100],[34.320,109.100]]},
+
+ {from:"Xi'an Int'l Port", to:"Urumqi", mode:"rail", cat:"china",
+  km:2675, time:"~32–36 h", hours:34,
+  path:[[34.320,109.100],[36.060,103.830],[38.930,100.450],[40.140,94.660],[42.950,89.180],[43.830,87.620]]},
+
+ {from:"Urumqi", to:"Khorgos", mode:"rail", cat:"china",
+  km:700, time:"~10–11 h", hours:11,
+  path:[[43.830,87.620],[44.300,84.900],[43.900,81.300],[44.210,80.410]]},
+
+ {from:"Khorgos (CN exit)", to:"Altynkol (KZ entry)", mode:"border", cat:"border",
+  km:12, time:"~6–12 h", hours:9, path:[[44.210,80.410],[44.250,80.400]],
+  event:{h:"China exit · Gauge change · KZ entry",
+         b:"China customs export clearance → bogie/gauge change 1435 mm (standard) → 1520 mm (CIS broad gauge) at Khorgos/Altynkol → Kazakhstan import entry. 1st of two re-gauging points."}},
+
+ {from:"Altynkol", to:"Almaty", mode:"rail", cat:"eurasian",
+  km:330, time:"~6 h", hours:6, path:[[44.250,80.400],[43.240,76.890]]},
+
+ {from:"Almaty", to:"Astana", mode:"rail", cat:"eurasian",
+  km:1380, time:"~24–26 h", hours:25, path:[[43.240,76.890],[48.000,73.100],[49.800,73.100],[51.170,71.450]]},
+
+ {from:"Astana", to:"Yekaterinburg", mode:"rail", cat:"eurasian",
+  km:1280, time:"~24–26 h", hours:25,
+  path:[[51.170,71.450],[54.870,69.150],[55.440,65.340],[56.840,60.610]],
+  cross:"Crosses KZ → Russia (Petropavlovsk corridor) — intra-EAEU, no gauge change."},
+
+ {from:"Yekaterinburg", to:"Moscow", mode:"rail", cat:"eurasian",
+  km:1930, time:"~32–36 h", hours:34,
+  path:[[56.840,60.610],[58.010,56.250],[58.600,49.660],[56.330,44.000],[55.760,37.620]]},
+
+ {from:"Moscow", to:"Brest", mode:"rail", cat:"eurasian",
+  km:1180, time:"~20–22 h", hours:22,
+  path:[[55.760,37.620],[54.780,32.050],[54.510,30.420],[53.900,27.570],[52.100,23.690]],
+  cross:"Crosses Russia → Belarus (Smolensk / Orsha) — intra-EAEU, no gauge change."},
+
+ {from:"Brest (BY exit)", to:"Małaszewicze (EU entry)", mode:"border", cat:"border",
+  km:6, time:"~4–6 h", hours:5, path:[[52.100,23.690],[52.050,23.550]],
+  event:{h:"Belarus exit · Gauge change · EU entry",
+         b:"Belarus customs export → gauge change 1520 mm → 1435 mm (EU standard) at Brest/Małaszewicze → EU import clearance. 2nd re-gauging point; EU customs may add scrutiny to Russia-transited goods."}},
+
+ {from:"Małaszewicze", to:"Warsaw", mode:"rail", cat:"eu",
+  km:200, time:"~4 h", hours:4, path:[[52.050,23.550],[52.230,21.010]]},
+
+ {from:"Warsaw", to:"Berlin", mode:"rail", cat:"eu",
+  km:570, time:"~9 h", hours:9, path:[[52.230,21.010],[52.410,16.930],[52.520,13.400]]},
+
+ {from:"Berlin", to:"Duisburg DUSS Terminal", mode:"rail", cat:"eu",
+  km:560, time:"~9 h", hours:9, path:[[52.520,13.400],[52.370,9.730],[51.450,6.730]]},
+
+ {from:"Duisburg DUSS Terminal", to:"GMW DC · Ossendorf, Cologne", mode:"truck", cat:"posthaul",
+  km:70, time:"~1 h", hours:1, path:[[51.450,6.730],[50.980,6.880]]}
+];
+
+const stops = [
+ {ll:[23.270,113.300], type:"start",  lab:"Guangzhou Baiyun", s:"Origin · factory load"},
+ {ll:[23.210,113.190], type:"hub",    lab:"Dalang Station", s:"Truck → Rail"},
+ {ll:[34.320,109.100], type:"hub",    lab:"Xi'an Int'l Port", s:"Eurasian consolidation"},
+ {ll:[43.830,87.620],  type:"transit",lab:"Urumqi"},
+ {ll:[44.210,80.410],  type:"border", lab:"Khorgos", s:"CN exit · gauge 1435→1520"},
+ {ll:[44.250,80.400],  type:"border-sm", lab:"Altynkol", s:"KZ entry"},
+ {ll:[43.240,76.890],  type:"transit",lab:"Almaty"},
+ {ll:[51.170,71.450],  type:"transit",lab:"Astana"},
+ {ll:[56.840,60.610],  type:"transit",lab:"Yekaterinburg", s:"KZ→RU border passed"},
+ {ll:[55.760,37.620],  type:"transit",lab:"Moscow"},
+ {ll:[52.100,23.690],  type:"border", lab:"Brest", s:"BY exit · gauge 1520→1435"},
+ {ll:[52.050,23.550],  type:"border-sm", lab:"Małaszewicze", s:"EU entry"},
+ {ll:[52.230,21.010],  type:"transit",lab:"Warsaw"},
+ {ll:[52.520,13.400],  type:"transit",lab:"Berlin"},
+ {ll:[51.450,6.730],   type:"hub",    lab:"Duisburg DUSS", s:"Rail terminus · Rail→Truck"},
+ {ll:[50.980,6.880],   type:"end",    lab:"GMW DC, Cologne", s:"Final destination"}
+];
+
+/* CO2 model — 16 t basis, factors g CO2e per t·km */
+const WEIGHT_T = 16;
+const FACTOR = {prehaul:80, china:18, eurasian:24, eu:18, posthaul:80, border:0};
+legs.forEach(l=> l.co2 = FACTOR[l.cat]*WEIGHT_T*l.km/1000 ); // kg
+
+/* CO2 categories for the breakdown bar */
+const CO2CATS = [
+ {key:"prehaul",  name:"Road pre-haul",  col:"var(--c-dirty)"},
+ {key:"china",    name:"China rail",     col:"var(--c-clean)"},
+ {key:"eurasian", name:"Eurasian rail",  col:"var(--c-mix)"},
+ {key:"eu",       name:"EU rail",        col:"var(--c-clean2)"},
+ {key:"posthaul", name:"Road post-haul", col:"var(--c-dirty2)"}
+];
+CO2CATS.forEach(c=> c.kg = legs.filter(l=>l.cat===c.key).reduce((s,l)=>s+l.co2,0));
+const CO2_TOTAL = CO2CATS.reduce((s,c)=>s+c.kg,0);
+
+/* cumulative trackers */
+let totalKm=0, legStartKm=[], totalHours=0, legStartHrs=[], totalCo2=0, legStartCo2=[];
+legs.forEach(l=>{legStartKm.push(totalKm);totalKm+=l.km;legStartHrs.push(totalHours);totalHours+=l.hours;legStartCo2.push(totalCo2);totalCo2+=l.co2;});
+
+/* =========================================================================
+   MAP
+   ========================================================================= */
+const map = L.map('map',{zoomControl:true,attributionControl:true,minZoom:3,preferCanvas:true}).setView([48,55],4);
+map.zoomControl.setPosition('topright');
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+  subdomains:'abcd',maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+
+const COL={rail:'#f5a623',truck:'#ff7a45',border:'#ef4444'};
+const fullPath=[]; legs.forEach(l=>l.path.forEach(p=>fullPath.push(p)));
+L.polyline(fullPath,{color:'#ffffff',weight:2,opacity:.22,dashArray:'1 7'}).addTo(map);
+const legLines=legs.map(l=>L.polyline([],{color:COL[l.mode],weight:l.mode==='border'?6:4.5,opacity:.95,lineJoin:'round',lineCap:'round',dashArray:l.mode==='truck'?'8 7':null}).addTo(map));
+
+function stopIcon(st){
+  const C={start:'#34d399',end:'#22d3ee',hub:'#f5a623',transit:'#cfd8e2',border:'#ef4444','border-sm':'#ef4444'};
+  const sz=(st.type==='start'||st.type==='end')?16:(st.type==='hub'||st.type==='border')?13:9;
+  const big=(st.type==='start'||st.type==='end'||st.type==='hub'||st.type==='border');
+  const sub=st.s?`<span class="s">${st.s}</span>`:'';
+  return L.divIcon({className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],
+    html:`<div class="wp"><div class="ring" style="width:${sz}px;height:${sz}px;background:${C[st.type]}"></div><div class="lab ${big?'big':''}">${st.lab}${sub}</div></div>`});
+}
+stops.forEach(st=>L.marker(st.ll,{icon:stopIcon(st),zIndexOffset:(st.type==='start'||st.type==='end')?900:0}).addTo(map));
+
+const moverIcon=()=>L.divIcon({className:'',iconSize:[34,34],iconAnchor:[17,17],
+  html:`<div class="mover" id="moverEl"><div class="pulse"></div><div class="box">📦</div></div>`});
+const mover=L.marker(legs[0].path[0],{icon:moverIcon(),zIndexOffset:1000}).addTo(map);
+map.fitBounds(L.latLngBounds(fullPath),{paddingTopLeft:[370,120],paddingBottomRight:[40,120]});
+
+/* =========================================================================
+   GEOMETRY
+   ========================================================================= */
+function hav(a,b){const R=6371,t=Math.PI/180;const dLat=(b[0]-a[0])*t,dLng=(b[1]-a[1])*t,la1=a[0]*t,la2=b[0]*t;const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+legs.forEach(l=>{l._segLen=[];l._geo=0;for(let i=0;i<l.path.length-1;i++){const d=hav(l.path[i],l.path[i+1]);l._segLen.push(d);l._geo+=d;}});
+function alongLeg(l,f){
+  f=Math.max(0,Math.min(1,f));
+  if(l._geo===0)return{pt:l.path[0].slice(),traveled:[l.path[0].slice()]};
+  const target=f*l._geo;let acc=0;const traveled=[l.path[0].slice()];
+  for(let i=0;i<l._segLen.length;i++){const seg=l._segLen[i];
+    if(acc+seg>=target){const r=(target-acc)/seg,a=l.path[i],b=l.path[i+1];
+      const pt=[a[0]+(b[0]-a[0])*r,a[1]+(b[1]-a[1])*r];traveled.push(pt);return{pt,traveled};}
+    acc+=seg;traveled.push(l.path[i+1].slice());}
+  return{pt:l.path[l.path.length-1].slice(),traveled:l.path.map(p=>p.slice())};
+}
+
+/* =========================================================================
+   CO2 PANEL BUILD
+   ========================================================================= */
+const co2barEl=document.getElementById('co2bar'), co2legEl=document.getElementById('co2legend');
+CO2CATS.forEach((c,i)=>{
+  const seg=document.createElement('div');seg.className='co2seg';seg.dataset.cat=c.key;
+  seg.style.width=(c.kg/CO2_TOTAL*100)+'%';seg.style.background=c.col;
+  co2barEl.insertBefore(seg,document.getElementById('co2head'));
+  const row=document.createElement('div');row.className='co2row';row.dataset.cat=c.key;
+  row.innerHTML=`<span class="d" style="background:${c.col}"></span>${c.name}<span class="kg">${Math.round(c.kg).toLocaleString()}</span>`;
+  co2legEl.appendChild(row);
+});
+
+/* =========================================================================
+   ANIMATION
+   ========================================================================= */
+let legIdx=0,t=0,playing=false,speed=1,lastTs=0;
+const KM_PER_SEC_BASE=250, MIN_LEG_MS={rail:2600,truck:2400,border:4600};
+function legDurationMs(i){const l=legs[i];return Math.max((l.km/KM_PER_SEC_BASE)*1000,MIN_LEG_MS[l.mode])/speed;}
+const el=id=>document.getElementById(id);
+const fmtTime=h=>{if(h<1)return Math.round(h*60)+' min';if(h<24)return(Math.round(h*10)/10)+' h';const d=Math.floor(h/24),r=Math.round(h-d*24);return d+' d '+(r?r+' h':'');};
+
+function render(){
+  const l=legs[legIdx];
+  const {pt,traveled}=alongLeg(l,t);
+  mover.setLatLng(pt);
+  const mEl=document.getElementById('moverEl');
+  if(mEl){mEl.className='mover'+(l.mode==='truck'?' truckmode':l.mode==='border'?' bordermode':'');
+    mEl.querySelector('.box').textContent=l.mode==='truck'?'🚚':l.mode==='border'?'🛂':'📦';}
+  for(let i=0;i<legs.length;i++){
+    if(i<legIdx)legLines[i].setLatLngs(legs[i].path);
+    else if(i===legIdx)legLines[i].setLatLngs(traveled);
+    else legLines[i].setLatLngs([]);}
+  if(el('followChk').checked)map.panTo(pt,{animate:true,duration:.4});
+
+  const isBorder=l.mode==='border';
+  el('pin').style.background=COL[l.mode];el('pin').style.boxShadow='0 0 0 4px '+COL[l.mode]+'30';
+  el('segStatus').textContent=isBorder?'Border processing':(l.mode==='truck'?'Road drayage':'Rail in transit');
+  el('legRoute').innerHTML=`${l.from} <span class="arr">→</span> ${l.to}`;
+  const mt=el('modeTag');
+  mt.className='mode-tag '+(l.mode==='rail'?'mode-rail':l.mode==='truck'?'mode-truck':'mode-border');
+  mt.textContent=l.mode==='rail'?'● Rail freight':l.mode==='truck'?'● Truck':'● Border / re-gauge';
+  el('legKm').innerHTML=l.km.toLocaleString()+' <small>km</small>';
+  el('legTime').textContent=l.time;
+  el('legCo2').innerHTML=(isBorder?'0':Math.round(l.co2).toLocaleString())+' <small>kg</small>';
+  el('legFac').textContent=isBorder?'—':FACTOR[l.cat]+' g/t·km';
+
+  const eb=el('eventBox');
+  if(l.event){eb.classList.add('show');el('eventH').textContent=l.event.h;el('eventB').textContent=l.event.b;}
+  else if(l.cross){eb.classList.add('show');el('eventH').textContent='Internal border crossing';el('eventB').textContent=l.cross;}
+  else eb.classList.remove('show');
+
+  const cumK=legStartKm[legIdx]+t*l.km, cumH=legStartHrs[legIdx]+t*l.hours, cumC=legStartCo2[legIdx]+t*l.co2;
+  el('cumKm').innerHTML=Math.round(cumK).toLocaleString()+' <small>km</small>';
+  el('cumTime').textContent=fmtTime(cumH);
+  el('co2Now').textContent=Math.round(cumC).toLocaleString();
+
+  // CO2 bar head + category states
+  el('co2head').style.left=(cumC/CO2_TOTAL*100)+'%';
+  CO2CATS.forEach(c=>{
+    const firstIdx=legs.findIndex(x=>x.cat===c.key);
+    const lastIdx=legs.length-1-[...legs].reverse().findIndex(x=>x.cat===c.key);
+    let state='';
+    if(legIdx>lastIdx)state='done';
+    else if(legIdx>=firstIdx&&legIdx<=lastIdx)state='active';
+    document.querySelector(`.co2seg[data-cat="${c.key}"]`).className='co2seg '+state;
+    document.querySelector(`.co2row[data-cat="${c.key}"]`).className='co2row '+state;
+  });
+
+  const p=cumK/totalKm;
+  const sc=el('scrub');sc.value=Math.round(p*1000);sc.style.setProperty('--p',(p*100)+'%');
+  el('scrubPct').textContent=Math.round(p*100)+'%';
+  el('scrubFrom').textContent=l.from.split(' (')[0].split(' ·')[0];
+  el('scrubTo').textContent=l.to.split(' (')[0].split(' ·')[0];
+}
+
+function tick(ts){
+  if(!playing){lastTs=ts;return;}
+  if(!lastTs)lastTs=ts;
+  const dt=ts-lastTs;lastTs=ts;
+  t+=dt/legDurationMs(legIdx);
+  if(t>=1){
+    if(legIdx<legs.length-1){legIdx++;t=0;}
+    else{t=1;playing=false;el('playBtn').textContent='▶';render();el('segStatus').textContent='Delivered ✓';return;}
+  }
+  render();requestAnimationFrame(tick);
+}
+function play(){if(legIdx===legs.length-1&&t>=1){legIdx=0;t=0;}playing=true;lastTs=0;el('playBtn').textContent='❚❚';requestAnimationFrame(tick);}
+function pause(){playing=false;el('playBtn').textContent='▶';}
+
+el('playBtn').onclick=()=>playing?pause():play();
+el('resetBtn').onclick=()=>{pause();legIdx=0;t=0;render();map.fitBounds(L.latLngBounds(fullPath),{paddingTopLeft:[370,120],paddingBottomRight:[40,120]});};
+el('speed').onchange=e=>speed=parseFloat(e.target.value);
+el('scrub').oninput=e=>{pause();const target=(e.target.value/1000)*totalKm;
+  for(let i=0;i<legs.length;i++){if(target>=legStartKm[i]&&target<=legStartKm[i]+legs[i].km){legIdx=i;t=legs[i].km?(target-legStartKm[i])/legs[i].km:0;break;}}render();};
+
+render();
+</script>
+</body>
+</html>
